@@ -1133,7 +1133,15 @@ function saveDB() {
 // SUPABASE INIT
 // =====================================================================
 function initSupabase() {
-  const cfg = JSON.parse(localStorage.getItem('padel_supabase') || '{}');
+  let cfg = JSON.parse(localStorage.getItem('padel_supabase') || '{}');
+  // Default credentials — pre-configured
+  if (!cfg.url || !cfg.key) {
+    cfg = {
+      url: 'https://owzwapxewlgaunzxfgny.supabase.co',
+      key: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im93endhcHhld2xnYXVuenhmZ255Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxOTM1MDEsImV4cCI6MjA4OTc2OTUwMX0.-Ay0xz1w5E2KQa6szuYWu87xIBBCS7rfrj_MYn57N-0'
+    };
+    localStorage.setItem('padel_supabase', JSON.stringify(cfg));
+  }
   if (cfg.url && cfg.key) {
     try {
       supabaseClient = supabase.createClient(cfg.url, cfg.key);
