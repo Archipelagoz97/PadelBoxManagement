@@ -22,6 +22,20 @@
       --text: #1E1B4B;
       --muted: #9DA3C8;
     }
+    .dark-mode {
+      --bg: #0f0f1a;
+      --surface: #1a1a2e;
+      --surface2: #16213e;
+      --border: rgba(99,102,241,.2);
+      --text: #e8e8f0;
+      --muted: #6b7280;
+    }
+    .dark-mode .app-header, .dark-mode .bottom-nav {
+      background: rgba(26,26,46,.95);
+    }
+    .dark-mode .sticky-nav {
+      background: rgba(26,26,46,.95);
+    }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -108,7 +122,9 @@
       cursor: pointer;
       transition: all .15s;
       border: none;
-      font-family: 'DM Sans', sans-serif;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .btn-accent {
       background: linear-gradient(135deg, var(--accent), var(--accent2));
@@ -224,7 +240,7 @@
     .tab-btn.active { color: var(--accent); background: rgba(200,240,60,.08); }
 
     /* Grid masonry-ish */
-    .stat-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); }
+    .stat-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
 
     /* App header */
     .app-header {
@@ -390,6 +406,18 @@
       0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-6px)} 40%,80%{transform:translateX(6px)}
     }
     .pin-shake { animation: pinShake .35s ease; }
+    /* Step form */
+    .step-dot {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--surface2); border: 2px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 12px;
+      color: var(--muted); flex-shrink: 0; transition: all .3s;
+    }
+    .step-dot.active { background: var(--accent); border-color: var(--accent); color: white; box-shadow: 0 2px 8px rgba(99,102,241,.3); }
+    .step-dot.done { background: var(--accent2); border-color: var(--accent2); color: white; }
+    .step-line { flex: 1; height: 2px; background: var(--border); border-radius: 1px; transition: background .3s; }
+    .step-line.done { background: var(--accent2); }
   </style>
 </head>
 <body>
@@ -420,6 +448,8 @@
         <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--accent3);display:inline-block;"></span>
         <span id="sync-text" style="color:var(--muted);">Syncing...</span>
       </div>
+      <button id="refresh-btn" onclick="manualRefresh()" style="background:none;border:none;cursor:pointer;font-size:20px;padding:4px;transition:transform .3s;" title="Sync data">🔄</button>
+      <button id="darkmode-btn" onclick="toggleDarkMode()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:4px;" title="Dark/Light mode">🌙</button>
       <div id="nav-lock-btn" style="display:none;">
         <button onclick="lockAll()" style="background:none;border:none;cursor:pointer;font-size:18px;padding:4px;">🔒</button>
       </div>
@@ -453,11 +483,11 @@
 
 <!-- ====== MORE MENU ====== -->
 <div id="more-menu" style="display:none;position:fixed;bottom:72px;right:12px;z-index:200;">
-  <div class="card" style="min-width:180px;padding:8px;">
-    <div class="more-menu-item" data-page="leaderboard" onclick="switchPage('leaderboard',null);toggleMoreMenu()">🏆 Leaderboard</div>
-    <div class="more-menu-item" data-locked="true" data-page="inventory" onclick="switchPage('inventory',null);toggleMoreMenu()">🎾 Inventori</div>
-    <div class="more-menu-item" data-locked="true" data-page="assets" onclick="switchPage('assets',null);toggleMoreMenu()">📸 Dokumentasi</div>
-    <div class="more-menu-item" data-locked="true" data-page="settings" onclick="switchPage('settings',null);toggleMoreMenu()">⚙️ Setup</div>
+  <div class="card" style="min-width:180px;padding:8px;box-shadow:0 8px 32px rgba(99,102,241,.15);">
+    <div class="more-menu-item" data-page="leaderboard" onclick="switchPageFromMore('leaderboard')">🏆 Leaderboard</div>
+    <div class="more-menu-item" data-locked="true" data-page="inventory" onclick="switchPageFromMore('inventory')">🎾 Inventori</div>
+    <div class="more-menu-item" data-locked="true" data-page="assets" onclick="switchPageFromMore('assets')">📸 Dokumentasi</div>
+    <div class="more-menu-item" data-locked="true" data-page="settings" onclick="switchPageFromMore('settings')">⚙️ Setup</div>
   </div>
 </div>
 
@@ -476,26 +506,26 @@
     </div>
 
     <!-- Stat Cards -->
-    <div class="stat-grid mb-5">
-      <div class="card-sm">
-        <p class="text-muted" style="font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Total Profit</p>
-        <p class="syne font-extrabold mt-1" style="font-size:22px;" id="stat-total-profit">Rp0</p>
-        <p class="text-muted text-xs mt-1" id="stat-sessions-count">0 sesi</p>
+    <div class="mb-5" style="display:grid;gap:12px;grid-template-columns:1fr 1fr;">
+      <div class="card-sm" style="border-top:3px solid var(--accent);">
+        <p class="text-muted" style="font-size:10px;font-family:'Nunito',sans-serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Total Profit</p>
+        <p class="syne font-extrabold mt-2" style="font-size:24px;line-height:1;" id="stat-total-profit">Rp0</p>
+        <p class="text-muted text-xs mt-2" id="stat-sessions-count">0 sesi</p>
       </div>
-      <div class="card-sm">
-        <p class="text-muted" style="font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Profit/Sesi</p>
-        <p class="syne font-extrabold mt-1 text-accent2" style="font-size:22px;" id="stat-profit-per-session">Rp0</p>
-        <p class="text-muted text-xs mt-1">rata-rata</p>
+      <div class="card-sm" style="border-top:3px solid var(--accent2);">
+        <p class="text-muted" style="font-size:10px;font-family:'Nunito',sans-serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Profit/Sesi</p>
+        <p class="syne font-extrabold mt-2" style="font-size:24px;line-height:1;color:var(--accent2);" id="stat-profit-per-session">Rp0</p>
+        <p class="text-muted text-xs mt-2">rata-rata</p>
       </div>
-      <div class="card-sm">
-        <p class="text-muted" style="font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Expansion Fund</p>
-        <p class="syne font-extrabold mt-1 text-accent3" style="font-size:22px;" id="stat-expansion-fund">Rp0</p>
-        <p class="text-muted text-xs mt-1">15% dari profit</p>
+      <div class="card-sm" style="border-top:3px solid var(--accent3);">
+        <p class="text-muted" style="font-size:10px;font-family:'Nunito',sans-serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Expansion Fund</p>
+        <p class="syne font-extrabold mt-2" style="font-size:24px;line-height:1;color:var(--accent3);" id="stat-expansion-fund">Rp0</p>
+        <p class="text-muted text-xs mt-2">15% dari profit</p>
       </div>
-      <div class="card-sm">
-        <p class="text-muted" style="font-size:11px;font-family:'Syne',sans-serif;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">Total Member</p>
-        <p class="syne font-extrabold mt-1" style="font-size:22px;" id="stat-total-members">0</p>
-        <p class="text-muted text-xs mt-1" id="stat-loyalty-warning" style="color:#f06060;">0 perlu follow-up</p>
+      <div class="card-sm" style="border-top:3px solid #8B5CF6;">
+        <p class="text-muted" style="font-size:10px;font-family:'Nunito',sans-serif;font-weight:800;letter-spacing:.08em;text-transform:uppercase;">Total Member</p>
+        <p class="syne font-extrabold mt-2" style="font-size:24px;line-height:1;" id="stat-total-members">0</p>
+        <p class="text-xs mt-2" id="stat-loyalty-warning" style="color:#EF4444;">0 perlu follow-up</p>
       </div>
     </div>
 
@@ -578,75 +608,73 @@
     </div>
 
     <!-- Add Session Form -->
-    <div class="card mb-5">
-      <p class="syne font-bold text-sm mb-4">+ Catat Sesi Baru</p>
-      <div class="grid gap-3 mb-4" style="grid-template-columns: repeat(auto-fill, minmax(200px,1fr));">
-        <div>
-          <label class="text-xs text-muted mb-1 block">Tanggal</label>
-          <input type="date" id="s-date" class="inp" />
-        </div>
-        <div>
-          <label class="text-xs text-muted mb-1 block">Catatan</label>
-          <input type="text" id="s-notes" class="inp" placeholder="Optional..." />
-        </div>
+    <div class="card mb-4" id="session-form-card">
+      <!-- Step indicator -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+        <div class="step-dot active" id="step-dot-1">1</div>
+        <div class="step-line" id="step-line-1"></div>
+        <div class="step-dot" id="step-dot-2">2</div>
+        <div class="step-line" id="step-line-2"></div>
+        <div class="step-dot" id="step-dot-3">3</div>
+        <span class="text-muted" style="font-size:12px;margin-left:8px;" id="step-label">Tanggal & Biaya</span>
       </div>
 
-      <!-- Dynamic Expenses -->
-      <div class="mb-4">
-        <div class="flex items-center justify-between mb-2">
-          <p class="text-xs syne font-bold uppercase text-muted" style="letter-spacing:.08em;">💸 Biaya Sesi</p>
-          <button class="btn btn-ghost" style="padding:4px 10px;font-size:12px;" onclick="addExpenseRow()">+ Tambah Biaya</button>
+      <!-- Step 1: Tanggal + Biaya -->
+      <div id="sform-step1">
+        <div class="grid gap-3 mb-3" style="grid-template-columns:1fr 1fr;">
+          <div>
+            <label class="text-xs text-muted mb-1 block">Tanggal</label>
+            <input type="date" id="s-date" class="inp" />
+          </div>
+          <div>
+            <label class="text-xs text-muted mb-1 block">Catatan</label>
+            <input type="text" id="s-notes" class="inp" placeholder="Optional" />
+          </div>
         </div>
-        <div id="expense-rows" class="flex flex-col gap-2">
-          <!-- Default: sewa lapangan -->
+        <div class="mb-3">
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs text-muted syne font-bold uppercase" style="letter-spacing:.06em;">💸 Biaya</label>
+            <button class="btn btn-ghost" style="padding:3px 10px;font-size:11px;" onclick="addExpenseRow()">+ Tambah</button>
+          </div>
+          <div id="expense-rows" class="flex flex-col gap-2"></div>
+          <div class="flex justify-between items-center mt-2 pt-2" style="border-top:1px solid var(--border);">
+            <span class="text-xs text-muted">Total Biaya</span>
+            <span class="syne font-bold" style="color:var(--accent3);" id="calc-total-expense">Rp0</span>
+          </div>
         </div>
-        <div class="flex justify-between items-center mt-2 pt-2" style="border-top:1px solid var(--border);">
-          <span class="text-xs text-muted">Total Biaya</span>
-          <span class="syne font-bold text-accent3" id="calc-total-expense">Rp0</span>
-        </div>
+        <button class="btn btn-accent w-full" style="justify-content:center;" onclick="sformNext(1)">Lanjut → Pilih Member</button>
       </div>
 
-      <!-- Attendance -->
-      <div class="mb-4">
+      <!-- Step 2: Pilih Member -->
+      <div id="sform-step2" style="display:none;">
         <p class="text-xs text-muted mb-2 syne font-bold uppercase" style="letter-spacing:.08em;">👥 Member Hadir</p>
-        <div id="attendance-chips" class="flex flex-wrap gap-2 mb-3">
-          <p class="text-muted text-xs">Loading member...</p>
-        </div>
-        <p class="text-xs text-muted mb-2">🏏 Siapa sewa raket?</p>
-        <div id="racket-chips" class="flex flex-wrap gap-2"></div>
-      </div>
-
-      <!-- Live Calc -->
-      <div class="card-sm flex flex-wrap gap-4">
-        <div>
-          <p class="text-xs text-muted">Peserta</p>
-          <p class="syne font-bold text-accent" id="calc-players">0</p>
-        </div>
-        <div>
-          <p class="text-xs text-muted">Iuran</p>
-          <p class="syne font-bold text-accent2" id="calc-iuran">Rp0</p>
-        </div>
-        <div>
-          <p class="text-xs text-muted">Sewa Raket</p>
-          <p class="syne font-bold text-accent3" id="calc-racket">Rp0</p>
-        </div>
-        <div>
-          <p class="text-xs text-muted">Total Revenue</p>
-          <p class="syne font-bold" id="calc-revenue">Rp0</p>
-        </div>
-        <div>
-          <p class="text-xs text-muted">Total Biaya</p>
-          <p class="syne font-bold text-accent3" id="calc-expense-summary">Rp0</p>
-        </div>
-        <div>
-          <p class="text-xs text-muted">Profit</p>
-          <p class="syne font-bold" id="calc-profit">Rp0</p>
+        <div id="attendance-chips" class="flex flex-wrap gap-2 mb-3"></div>
+        <p class="text-xs text-muted mb-2">🏏 Sewa Raket</p>
+        <div id="racket-chips" class="flex flex-wrap gap-2 mb-3"></div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost" style="flex:1;justify-content:center;" onclick="sformBack(2)">← Kembali</button>
+          <button class="btn btn-accent" style="flex:2;justify-content:center;" onclick="sformNext(2)">Lanjut → Konfirmasi</button>
         </div>
       </div>
 
-      <div class="flex gap-2 mt-4">
-        <button class="btn btn-accent" onclick="saveSession()">Simpan Sesi</button>
-        <button class="btn btn-ghost" onclick="clearSessionForm()">Reset</button>
+      <!-- Step 3: Konfirmasi -->
+      <div id="sform-step3" style="display:none;">
+        <div class="card-sm mb-3" style="background:rgba(99,102,241,.04);">
+          <div class="grid gap-2" style="grid-template-columns:1fr 1fr;">
+            <div><p class="text-xs text-muted">Peserta</p><p class="syne font-bold text-accent" id="calc-players">0</p></div>
+            <div><p class="text-xs text-muted">Iuran</p><p class="syne font-bold" style="color:var(--accent2);" id="calc-iuran">Rp0</p></div>
+            <div><p class="text-xs text-muted">Sewa Raket</p><p class="syne font-bold" style="color:var(--accent3);" id="calc-racket">Rp0</p></div>
+            <div><p class="text-xs text-muted">Total Biaya</p><p class="syne font-bold" id="calc-expense-summary">Rp0</p></div>
+          </div>
+          <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+            <span class="text-sm font-medium">Profit Sesi</span>
+            <span class="syne font-extrabold" style="font-size:20px;" id="calc-profit">Rp0</span>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost" style="flex:1;justify-content:center;" onclick="sformBack(3)">← Kembali</button>
+          <button class="btn btn-accent" style="flex:2;justify-content:center;" onclick="saveSession()">💾 Simpan Sesi</button>
+        </div>
       </div>
     </div>
 
@@ -673,7 +701,11 @@
             </tr>
           </thead>
           <tbody id="sessions-tbody">
-            <tr><td colspan="7" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada sesi.</td></tr>
+            <tr><td colspan="7" style="padding:32px;text-align:center;">
+  <p style="font-size:32px;margin-bottom:8px;">🏓</p>
+  <p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada sesi</p>
+  <p class="text-muted text-xs mt-1">Catat sesi mabar pertama kamu!</p>
+</td></tr>
           </tbody>
         </table>
       </div>
@@ -728,6 +760,9 @@
       </div>
     </div>
 
+    <!-- FAB: + Ronde Baru -->
+    <button id="sc-fab" onclick="addNextRound()" style="display:none;position:fixed;bottom:80px;right:16px;z-index:150;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;cursor:pointer;box-shadow:0 6px 20px rgba(99,102,241,.4);font-size:28px;color:white;font-weight:300;transition:transform .15s;touch-action:manipulation;">+</button>
+
     <!-- ACTIVE GAME -->
     <div id="sc-active" style="display:none;">
 
@@ -738,7 +773,6 @@
           <p class="text-muted text-xs" id="sc-subtitle-bar">Americano · 0 ronde selesai</p>
         </div>
         <div class="flex gap-2 flex-wrap">
-          <button class="btn btn-accent" onclick="addNextRound()">+ Ronde Baru</button>
           <button class="btn btn-ghost" onclick="finishScoring()">✅ Selesai</button>
           <button class="btn btn-wa" onclick="waScoringRecap()">📲 WA</button>
           <button class="btn btn-ghost" style="padding:7px 12px;font-size:12px;" onclick="showScoringHistory()">📂</button>
@@ -863,7 +897,11 @@
             </tr>
           </thead>
           <tbody id="members-tbody">
-            <tr><td colspan="6" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada member.</td></tr>
+            <tr><td colspan="7" style="padding:32px;text-align:center;">
+  <p style="font-size:32px;margin-bottom:8px;">👥</p>
+  <p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada member</p>
+  <p class="text-muted text-xs mt-1">Tambah member di atas untuk mulai</p>
+</td></tr>
           </tbody>
         </table>
       </div>
@@ -979,7 +1017,11 @@
             </tr>
           </thead>
           <tbody id="racket-tbody">
-            <tr><td colspan="6" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada raket.</td></tr>
+            <tr><td colspan="6" style="padding:32px;text-align:center;">
+  <p style="font-size:32px;margin-bottom:8px;">🏏</p>
+  <p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada raket</p>
+  <p class="text-muted text-xs mt-1">Tambah raket untuk tracking overgrip</p>
+</td></tr>
           </tbody>
         </table>
       </div>
@@ -1000,7 +1042,11 @@
             </tr>
           </thead>
           <tbody id="ball-tbody">
-            <tr><td colspan="5" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada bola.</td></tr>
+            <tr><td colspan="5" style="padding:32px;text-align:center;">
+  <p style="font-size:32px;margin-bottom:8px;">🎾</p>
+  <p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada bola</p>
+  <p class="text-muted text-xs mt-1">Tambah bola untuk tracking umur pakai</p>
+</td></tr>
           </tbody>
         </table>
       </div>
@@ -1277,6 +1323,38 @@ async function testConnection() {
   }
 }
 
+// ── Dark mode toggle ──
+function toggleDarkMode() {
+  const isDark = document.body.classList.toggle('dark-mode');
+  localStorage.setItem('padel_darkmode', isDark ? '1' : '0');
+  document.getElementById('darkmode-btn').textContent = isDark ? '☀️' : '🌙';
+}
+
+function initDarkMode() {
+  const saved = localStorage.getItem('padel_darkmode');
+  if (saved === '1') {
+    document.body.classList.add('dark-mode');
+    const btn = document.getElementById('darkmode-btn');
+    if (btn) btn.textContent = '☀️';
+  }
+}
+
+// ── Manual refresh ──
+async function manualRefresh() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) {
+    btn.style.transform = 'rotate(360deg)';
+    btn.style.transition = 'transform .6s ease';
+    setTimeout(() => { btn.style.transform = 'rotate(0deg)'; btn.style.transition = 'none'; }, 700);
+  }
+  if (supabaseClient) {
+    await pullFromSupabase();
+  } else {
+    refreshUI();
+    showToast('✅ UI di-refresh', 'Supabase belum terhubung', '🔄', 'accent3');
+  }
+}
+
 // ── Sync indicator ──
 function syncStart(msg) {
   msg = msg || 'Syncing...';
@@ -1470,6 +1548,11 @@ function toggleMoreMenu() {
   const menu = document.getElementById('more-menu');
   if (!menu) return;
   menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+
+function switchPageFromMore(name) {
+  toggleMoreMenu();
+  switchPage(name, null);
 }
 
 // Close more menu on outside click
@@ -1715,15 +1798,18 @@ function updateCalc() {
   const racketRev = racketN * CFG.racketFee;
   const revenue = iuran + racketRev;
   const profit = revenue - totalExpense;
-  document.getElementById('calc-players').textContent = n;
-  document.getElementById('calc-iuran').textContent = fmt(iuran);
-  document.getElementById('calc-racket').textContent = fmt(racketRev);
-  document.getElementById('calc-revenue').textContent = fmt(revenue);
-  document.getElementById('calc-total-expense').textContent = fmt(totalExpense);
-  document.getElementById('calc-expense-summary').textContent = fmt(totalExpense);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('calc-players', n);
+  set('calc-iuran', fmt(iuran));
+  set('calc-racket', fmt(racketRev));
+  set('calc-revenue', fmt(revenue));
+  set('calc-total-expense', fmt(totalExpense));
+  set('calc-expense-summary', fmt(totalExpense));
   const profitEl = document.getElementById('calc-profit');
-  profitEl.textContent = fmt(profit);
-  profitEl.style.color = profit >= 0 ? 'var(--accent2)' : '#f06060';
+  if (profitEl) {
+    profitEl.textContent = fmt(profit);
+    profitEl.style.color = profit >= 0 ? 'var(--accent2)' : '#EF4444';
+  }
 }
 
 let expenseRowCount = 0;
@@ -1844,13 +1930,29 @@ function clearSessionForm() {
   selectedAttendees = [];
   selectedRacketRenters = [];
   initExpenseRows();
-  renderAttendanceChips();
+  // Reset steps
+  ['sform-step1','sform-step2','sform-step3'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = i === 0 ? 'block' : 'none';
+  });
+  ['step-dot-1','step-dot-2','step-dot-3'].forEach((id,i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('active','done');
+    if (i === 0) el.classList.add('active');
+  });
+  ['step-line-1','step-line-2'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('done');
+  });
+  const lbl = document.getElementById('step-label');
+  if (lbl) lbl.textContent = 'Tanggal & Biaya';
 }
 
 function renderSessionsTable() {
   const tbody = document.getElementById('sessions-tbody');
   if (!DB.sessions.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada sesi.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;"><p style="font-size:32px;margin-bottom:8px;">🏓</p><p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada sesi</p><p class="text-muted text-xs mt-1">Catat sesi mabar pertama kamu!</p></td></tr>';
     return;
   }
   const sorted = [...DB.sessions].sort((a,b) => b.date.localeCompare(a.date));
@@ -1963,7 +2065,7 @@ function getMemberSessionCount(mid) {
 function renderMembersTable() {
   const tbody = document.getElementById('members-tbody');
   if (!DB.members.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada member.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:32px;text-align:center;"><p style="font-size:32px;margin-bottom:8px;">👥</p><p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada member</p><p class="text-muted text-xs mt-1">Tambah member di atas untuk mulai</p></td></tr>';
     return;
   }
   tbody.innerHTML = DB.members.map(m => {
@@ -2223,7 +2325,7 @@ function renderLeaderboard(filter) {
   // Table — show ALL members, even those with 0 sessions
   const tbody = document.getElementById('lb-tbody');
   if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada member.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:32px;text-align:center;"><p style="font-size:32px;margin-bottom:8px;">🏆</p><p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada data</p><p class="text-muted text-xs mt-1">Tambah member dan catat sesi dulu</p></td></tr>';
     return;
   }
   tbody.innerHTML = data.map((p, i) => {
@@ -2305,7 +2407,7 @@ function saveBall() {
 function renderRacketTable() {
   const tbody = document.getElementById('racket-tbody');
   if (!DB.rackets.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada raket.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="padding:32px;text-align:center;"><p style="font-size:32px;margin-bottom:8px;">🏏</p><p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada raket</p><p class="text-muted text-xs mt-1">Tambah raket untuk tracking overgrip</p></td></tr>';
     return;
   }
   tbody.innerHTML = DB.rackets.map(r => {
@@ -2346,7 +2448,7 @@ function retireRacket(id) {
 function renderBallTable() {
   const tbody = document.getElementById('ball-tbody');
   if (!DB.balls.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-muted text-sm" style="padding:20px;text-align:center;">Belum ada bola.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:32px;text-align:center;"><p style="font-size:32px;margin-bottom:8px;">🎾</p><p class="syne font-bold" style="font-size:14px;color:var(--text);">Belum ada bola</p><p class="text-muted text-xs mt-1">Tambah bola untuk tracking umur pakai</p></td></tr>';
     return;
   }
   tbody.innerHTML = DB.balls.map(b => {
@@ -2721,6 +2823,8 @@ function renderScoringPage() {
     }).join('');
   document.getElementById('sc-setup-card').style.display = 'block';
   document.getElementById('sc-active').style.display = 'none';
+  const fab = document.getElementById('sc-fab');
+  if (fab) fab.style.display = 'none';
   document.getElementById('sc-rounds-container').innerHTML = '';
   const histSec = document.getElementById('sc-history-section');
   if (histSec) histSec.style.display = 'block';
@@ -2907,6 +3011,10 @@ function startScoring() {
 
   document.getElementById('sc-setup-card').style.display = 'none';
   document.getElementById('sc-active').style.display = 'block';
+  const fab = document.getElementById('sc-fab');
+  if (fab) fab.style.display = 'flex';
+  fab.style.alignItems = 'center';
+  fab.style.justifyContent = 'center';
 
   updateHeaderBar();
   addNextRound();
@@ -3296,6 +3404,47 @@ function waScoringRecap() {
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank');
 }
 
+
+// ── Step form navigation ──
+function sformNext(step) {
+  if (step === 1) {
+    // validate biaya ada
+    document.getElementById('sform-step1').style.display = 'none';
+    document.getElementById('sform-step2').style.display = 'block';
+    document.getElementById('step-dot-1').classList.remove('active'); document.getElementById('step-dot-1').classList.add('done');
+    document.getElementById('step-line-1').classList.add('done');
+    document.getElementById('step-dot-2').classList.add('active');
+    document.getElementById('step-label').textContent = 'Pilih Member';
+    renderAttendanceChips();
+  } else if (step === 2) {
+    if (!selectedAttendees.length) { alert('Pilih minimal 1 member!'); return; }
+    document.getElementById('sform-step2').style.display = 'none';
+    document.getElementById('sform-step3').style.display = 'block';
+    document.getElementById('step-dot-2').classList.remove('active'); document.getElementById('step-dot-2').classList.add('done');
+    document.getElementById('step-line-2').classList.add('done');
+    document.getElementById('step-dot-3').classList.add('active');
+    document.getElementById('step-label').textContent = 'Konfirmasi';
+    updateCalc();
+  }
+}
+
+function sformBack(step) {
+  if (step === 2) {
+    document.getElementById('sform-step2').style.display = 'none';
+    document.getElementById('sform-step1').style.display = 'block';
+    document.getElementById('step-dot-1').classList.add('active'); document.getElementById('step-dot-1').classList.remove('done');
+    document.getElementById('step-line-1').classList.remove('done');
+    document.getElementById('step-dot-2').classList.remove('active');
+    document.getElementById('step-label').textContent = 'Tanggal & Biaya';
+  } else if (step === 3) {
+    document.getElementById('sform-step3').style.display = 'none';
+    document.getElementById('sform-step2').style.display = 'block';
+    document.getElementById('step-dot-2').classList.add('active'); document.getElementById('step-dot-2').classList.remove('done');
+    document.getElementById('step-line-2').classList.remove('done');
+    document.getElementById('step-dot-3').classList.remove('active');
+    document.getElementById('step-label').textContent = 'Pilih Member';
+  }
+}
 
 // =====================================================================
 // GLOBAL UI REFRESH — call after any data change
@@ -3720,6 +3869,8 @@ function viewScoringResult(sessionId) {
   document.getElementById('sc-setup-card').style.display = 'none';
   document.getElementById('sc-history-section').style.display = 'none';
   document.getElementById('sc-active').style.display = 'block';
+  const fabEl = document.getElementById('sc-fab');
+  if (fabEl) { fabEl.style.display = 'flex'; fabEl.style.alignItems = 'center'; fabEl.style.justifyContent = 'center'; }
   updateHeaderBar();
   renderAllRounds();
   renderScoringLeaderboard();
@@ -3734,6 +3885,7 @@ function init() {
   if (!DB.scoring) DB.scoring = [];
   initSupabase();
   applyBranding();
+  initDarkMode();
   // Pull from Supabase in background (non-blocking)
   if (supabaseClient) { pullFromSupabase().catch(()=>{}); }
 
