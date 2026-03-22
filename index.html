@@ -243,6 +243,8 @@
 
     /* Shine animation for milestone */
     @keyframes shine { 0%{background-position:-200%} 100%{background-position:200%} }
+    @keyframes syncPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .sync-pulsing { animation: syncPulse .8s infinite; }
     .shimmer {
       background: linear-gradient(90deg, var(--accent2) 0%, var(--accent) 50%, var(--accent2) 100%);
       background-size: 200%;
@@ -343,8 +345,14 @@
       <div class="nav-item" data-page="inventory" data-locked="true" onclick="switchPage('inventory', this)">Inventori</div>
       <div class="nav-item" data-page="assets" data-locked="true" onclick="switchPage('assets', this)">Dokumentasi</div>
       <div class="nav-item" data-page="settings" data-locked="true" onclick="switchPage('settings', this)">⚙ Setup</div>
-      <div id="nav-lock-btn" style="display:none;margin-left:auto;flex-shrink:0;">
-        <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;gap:5px;" onclick="lockAll()">🔒 Kunci</button>
+      <div style="margin-left:auto;flex-shrink:0;display:flex;align-items:center;gap:8px;">
+        <div id="sync-indicator" style="display:none;align-items:center;gap:5px;font-size:11px;font-family:'Syne',sans-serif;font-weight:600;">
+          <span id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:var(--accent3);display:inline-block;"></span>
+          <span id="sync-text" style="color:var(--muted);">Syncing...</span>
+        </div>
+        <div id="nav-lock-btn" style="display:none;">
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;" onclick="lockAll()">🔒 Kunci</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1158,11 +1166,40 @@ async function testConnection() {
   }
 }
 
+// ── Sync indicator ──
+function syncStart(msg) {
+  msg = msg || 'Syncing...';
+  const ind = document.getElementById('sync-indicator');
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  if (!ind) return;
+  ind.style.display = 'flex';
+  dot.style.background = 'var(--accent3)';
+  dot.classList.add('sync-pulsing');
+  txt.textContent = msg;
+  txt.style.color = 'var(--muted)';
+}
+
+function syncDone(success, msg) {
+  const ind = document.getElementById('sync-indicator');
+  const dot = document.getElementById('sync-dot');
+  const txt = document.getElementById('sync-text');
+  if (!ind) return;
+  dot.classList.remove('sync-pulsing');
+  dot.style.background = success ? 'var(--accent2)' : '#f06060';
+  txt.textContent = msg || (success ? 'Synced ✓' : 'Sync failed');
+  txt.style.color = success ? 'var(--accent2)' : '#f06060';
+  // Auto-hide after 3s
+  setTimeout(() => { ind.style.display = 'none'; }, 3000);
+}
+
+function syncError(msg) { syncDone(false, msg || 'Sync failed ✗'); }
+
 // ── Supabase Pull (two-way sync) ──
 async function pullFromSupabase() {
   if (!supabaseClient) return;
   try {
-    showToast('☁️ Sync...', 'Menarik data dari Supabase', '☁️', 'accent3');
+    syncStart('Syncing...');
 
     // Pull all tables in parallel
     const [membersRes, sessionsRes, attendanceRes, inventoryRes, assetsRes, scoringRes] = await Promise.all([
@@ -1275,14 +1312,23 @@ async function pullFromSupabase() {
 
     if (changed) {
       saveDB();
-      showToast('✅ Sync selesai!', 'Data dari Supabase berhasil ditarik.', '☁️', 'accent2');
+      syncDone(true, 'Synced ✓');
       renderDashboard();
+      // Refresh current visible page
+      const activePage = document.querySelector('.nav-item.active');
+      if (activePage) {
+        const page = activePage.dataset.page;
+        if (page === 'members') { renderMembersTable(); renderLoyaltyWarning(); }
+        if (page === 'sessions') renderSessionsTable();
+        if (page === 'leaderboard') renderLeaderboard('all');
+        if (page === 'inventory') { renderRacketTable(); renderBallTable(); }
+      }
     } else {
-      showToast('✅ Up to date', 'Tidak ada data baru dari Supabase.', '☁️', 'accent2');
+      syncDone(true, 'Up to date ✓');
     }
   } catch(e) {
     console.warn('Supabase pull failed:', e);
-    showToast('⚠️ Sync gagal', e.message, '⚠️', 'accent3');
+    syncError('Sync failed');
   }
 }
 
@@ -1623,6 +1669,7 @@ async function saveSession() {
 
   // Try Supabase
   if (supabaseClient) {
+    syncStart('Saving session...');
     try {
       await supabaseClient.from('sessions').insert([{
         id: session.id, date,
@@ -1635,7 +1682,11 @@ async function saveSession() {
       await supabaseClient.from('attendance').insert(
         selectedAttendees.map(mid => ({ session_id: session.id, member_id: mid, date }))
       );
-    } catch(e) { console.warn('Supabase sync failed:', e); }
+      syncDone(true, 'Session saved ✓');
+    } catch(e) {
+      console.warn('Supabase sync failed:', e);
+      syncError('Save failed — data tersimpan lokal');
+    }
   }
 
   checkMilestones(getTotalProfit());
@@ -1743,11 +1794,16 @@ async function saveMember() {
   saveDB();
 
   if (supabaseClient) {
+    syncStart('Saving member...');
     try {
       await supabaseClient.from('members').insert([{
         id: member.id, name, phone, referral_by: member.referral_by, join_date: joinDate
       }]);
-    } catch(e) { console.warn('Supabase sync failed:', e); }
+      syncDone(true, 'Member saved ✓');
+    } catch(e) {
+      console.warn('Supabase sync failed:', e);
+      syncError('Save failed — data tersimpan lokal');
+    }
   }
 
   document.getElementById('m-name').value = '';
@@ -3088,9 +3144,14 @@ async function saveEditMember() {
   m.name = newName; m.phone = newPhone; m.join_date = newJoin; m.referral_by = newRef;
   saveDB();
   if (supabaseClient) {
+    syncStart('Updating member...');
     try {
       await supabaseClient.from('members').update({ name: newName, phone: newPhone, join_date: newJoin, referral_by: newRef }).eq('id', editingMemberId);
-    } catch(e) { console.warn('Supabase update member failed:', e); }
+      syncDone(true, 'Member updated ✓');
+    } catch(e) {
+      console.warn('Supabase update member failed:', e);
+      syncError('Update failed — data tersimpan lokal');
+    }
   }
   closeEditMemberModal();
   renderMembersTable();
@@ -3441,56 +3502,6 @@ function viewScoringResult(sessionId) {
 }
 
 // =====================================================================
-// SEED REAL MEMBERS (dari data komunitas)
-// =====================================================================
-function seedRealMembers() {
-  // Data dari CSV — urutan penting karena referral pakai nama
-  const raw = [
-    { name:'Chris',    phone:'085155255773', join:'2026-03-16', refBy: null },
-    { name:'Angel',    phone:'',             join:'2026-03-16', refBy: null },
-    { name:'Dewi',     phone:'',             join:'2026-03-16', refBy: null },
-    { name:'Rifqi',    phone:'',             join:'2026-03-16', refBy: 'Dewi' },
-    { name:'Pitha',    phone:'',             join:'2026-03-16', refBy: null },
-    { name:'Adham',    phone:'',             join:'2026-03-16', refBy: 'Pitha' },
-    { name:'Mischa',   phone:'',             join:'2026-03-16', refBy: 'Chris' },
-    { name:'Marcia',   phone:'',             join:'2026-03-16', refBy: null },
-    { name:'Hikaru',   phone:'',             join:'2026-03-22', refBy: 'Mischa' },
-    { name:'Patrick',  phone:'',             join:'2026-03-22', refBy: null },
-    { name:'Risa',     phone:'',             join:'2026-03-22', refBy: null },
-    { name:'Ari',      phone:'',             join:'2026-03-22', refBy: 'Risa' },
-    { name:'Patrick 2',phone:'',             join:'2026-03-22', refBy: null },
-  ];
-
-  // First pass: create all members with IDs
-  const nameToId = {};
-  raw.forEach((m, i) => {
-    const id = 'mb' + (i+1);
-    nameToId[m.name] = id;
-    DB.members.push({
-      id,
-      name: m.name,
-      phone: m.phone,
-      referral_by: null, // fill in second pass
-      join_date: m.join,
-      last_seen: null,
-      referral_count: 0,
-      created_at: new Date().toISOString(),
-    });
-  });
-
-  // Second pass: fill referral_by and increment referral_count
-  raw.forEach((m, i) => {
-    if (m.refBy && nameToId[m.refBy]) {
-      DB.members[i].referral_by = nameToId[m.refBy];
-      const refMember = DB.members.find(x => x.id === nameToId[m.refBy]);
-      if (refMember) refMember.referral_count = (refMember.referral_count || 0) + 1;
-    }
-  });
-
-  saveDB();
-}
-
-// =====================================================================
 // INIT (updated)
 // =====================================================================
 function init() {
@@ -3510,10 +3521,7 @@ function init() {
 
   initExpenseRows();
 
-  // Seed real members if DB is empty
-  if (!DB.members.length) {
-    seedRealMembers();
-  }
+
 
   // PIN: if set, start on Scoring (free page). Else start on Dashboard.
   if (isPINEnabled()) {
@@ -3705,6 +3713,26 @@ function closeEditModal(event) {
 }
 
 window.addEventListener('load', init);
+
+// Auto-pull when tab/app gets focus (so changes from other devices appear)
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && supabaseClient) {
+    pullFromSupabase().catch(() => {});
+  }
+});
+
+window.addEventListener('focus', () => {
+  if (supabaseClient) {
+    pullFromSupabase().catch(() => {});
+  }
+});
+
+// Also poll every 30 seconds when connected (for real-time-ish updates)
+setInterval(() => {
+  if (supabaseClient && !document.hidden) {
+    pullFromSupabase().catch(() => {});
+  }
+}, 30000);
 </script>
 <!-- ====== PIN MODAL ====== -->
 <div id="pin-modal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);">
