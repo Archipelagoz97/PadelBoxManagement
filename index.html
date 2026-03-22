@@ -1749,7 +1749,6 @@ function deleteSession(id) {
   if (!confirm('Hapus sesi ini?')) return;
   DB.sessions = DB.sessions.filter(s => s.id !== id);
   DB.attendance = DB.attendance.filter(a => a.session_id !== id);
-  // Recalculate member last_seen
   DB.members.forEach(m => {
     const sessions = DB.attendance.filter(a => a.member_id === m.id);
     if (sessions.length) {
@@ -1760,6 +1759,12 @@ function deleteSession(id) {
     }
   });
   saveDB();
+  if (supabaseClient) {
+    syncStart('Deleting...');
+    supabaseClient.from('sessions').delete().eq('id', id)
+      .then(() => syncDone(true, 'Deleted ✓'))
+      .catch(e => { console.warn(e); syncError('Delete failed'); });
+  }
   renderSessionsTable();
   renderDashboard();
 }
@@ -2129,20 +2134,34 @@ function saveRacket() {
   const date = document.getElementById('r-date').value || today();
   const price = parseInt(document.getElementById('r-price').value) || CFG.racketPrice;
   if (!name) { alert('Nama raket tidak boleh kosong!'); return; }
-  DB.rackets.push({ id: uid(), name, date, price, usage_count: 0, status: 'active' });
+  const item = { id: uid(), name, date, price, usage_count: 0, status: 'active' };
+  DB.rackets.push(item);
   saveDB();
   document.getElementById('r-name').value = '';
   renderRacketTable();
+  if (supabaseClient) {
+    syncStart('Saving...');
+    supabaseClient.from('inventory').insert([{ id: item.id, type: 'racket', name, purchase_date: date, price, usage_count: 0, status: 'active' }])
+      .then(() => syncDone(true, 'Saved ✓'))
+      .catch(e => { console.warn(e); syncError('Save failed'); });
+  }
 }
 
 function saveBall() {
   const name = document.getElementById('b-name').value.trim();
   const date = document.getElementById('b-date').value || today();
   if (!name) { alert('Kode bola tidak boleh kosong!'); return; }
-  DB.balls.push({ id: uid(), name, date, session_count: 0 });
+  const item = { id: uid(), name, date, session_count: 0 };
+  DB.balls.push(item);
   saveDB();
   document.getElementById('b-name').value = '';
   renderBallTable();
+  if (supabaseClient) {
+    syncStart('Saving...');
+    supabaseClient.from('inventory').insert([{ id: item.id, type: 'ball', name, purchase_date: date, usage_count: 0, status: 'active' }])
+      .then(() => syncDone(true, 'Saved ✓'))
+      .catch(e => { console.warn(e); syncError('Save failed'); });
+  }
 }
 
 function renderRacketTable() {
@@ -2174,7 +2193,16 @@ function renderRacketTable() {
 
 function retireRacket(id) {
   const r = DB.rackets.find(r => r.id === id);
-  if (r) { r.status = 'retired'; saveDB(); renderRacketTable(); }
+  if (!r) return;
+  r.status = 'retired';
+  saveDB();
+  renderRacketTable();
+  if (supabaseClient) {
+    syncStart('Updating...');
+    supabaseClient.from('inventory').update({ status: 'retired' }).eq('id', id)
+      .then(() => syncDone(true, 'Updated ✓'))
+      .catch(e => { console.warn(e); syncError('Update failed'); });
+  }
 }
 
 function renderBallTable() {
@@ -2215,6 +2243,12 @@ function deleteBall(id) {
   DB.balls = DB.balls.filter(b => b.id !== id);
   saveDB();
   renderBallTable();
+  if (supabaseClient) {
+    syncStart('Deleting...');
+    supabaseClient.from('inventory').delete().eq('id', id)
+      .then(() => syncDone(true, 'Deleted ✓'))
+      .catch(e => { console.warn(e); syncError('Delete failed'); });
+  }
 }
 
 // =====================================================================
@@ -2226,12 +2260,19 @@ function saveAsset() {
   const link = document.getElementById('a-link').value.trim();
   const notes = document.getElementById('a-notes').value.trim();
   if (!title || !link) { alert('Judul dan link wajib diisi!'); return; }
-  DB.assets.push({ id: uid(), title, date, link, notes });
+  const item = { id: uid(), title, date, link, notes };
+  DB.assets.push(item);
   saveDB();
   document.getElementById('a-title').value = '';
   document.getElementById('a-link').value = '';
   document.getElementById('a-notes').value = '';
   renderAssetsGrid();
+  if (supabaseClient) {
+    syncStart('Saving...');
+    supabaseClient.from('assets').insert([{ id: item.id, title, date, link, notes }])
+      .then(() => syncDone(true, 'Saved ✓'))
+      .catch(e => { console.warn(e); syncError('Save failed'); });
+  }
 }
 
 function renderAssetsGrid() {
@@ -2262,6 +2303,12 @@ function deleteAsset(id) {
   DB.assets = DB.assets.filter(a => a.id !== id);
   saveDB();
   renderAssetsGrid();
+  if (supabaseClient) {
+    syncStart('Deleting...');
+    supabaseClient.from('assets').delete().eq('id', id)
+      .then(() => syncDone(true, 'Deleted ✓'))
+      .catch(e => { console.warn(e); syncError('Delete failed'); });
+  }
 }
 
 // =====================================================================
