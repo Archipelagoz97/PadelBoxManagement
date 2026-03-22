@@ -682,7 +682,7 @@
     </div>
 
     <!-- SCORING HISTORY -->
-    <div id="sc-history-section" style="display:none;margin-top:8px;">
+    <div id="sc-history-section" style="margin-top:16px;">
       <div class="flex items-center justify-between mb-3">
         <p class="syne font-bold text-sm">📂 Riwayat Scoring</p>
         <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px;" onclick="document.getElementById('sc-history-section').style.display='none';">✕ Tutup</button>
@@ -2593,7 +2593,8 @@ function renderScoringPage() {
   document.getElementById('sc-active').style.display = 'none';
   document.getElementById('sc-rounds-container').innerHTML = '';
   const histSec = document.getElementById('sc-history-section');
-  if (histSec) histSec.style.display = 'none';
+  if (histSec) histSec.style.display = 'block';
+  renderScoringHistory();
   scState = { sessionId:null, format:'americano', numCourts:1, maxScore:21, players:[], rounds:[] };
   prevRanks = {};
   scSelectedPlayers = [];
@@ -3501,7 +3502,7 @@ function showScoringHistory() {
 function renderScoringHistory() {
   const el = document.getElementById('sc-history-list');
   if (!el) return;
-  const scored = DB.scoring ? DB.scoring.filter(sc => sc.stats && sc.stats.length) : [];
+  const scored = DB.scoring ? DB.scoring.filter(sc => sc.rounds && sc.rounds.length) : [];
   if (!scored.length) {
     el.innerHTML = '<p class="text-muted text-sm">Belum ada scoring tersimpan.</p>';
     return;
@@ -3510,7 +3511,8 @@ function renderScoringHistory() {
   const items = sorted.map(sc => {
     const s = DB.sessions.find(s => s.id === sc.session_id);
     const fmt2 = sc.format === 'mexicano' ? '📊 Mexicano' : '🔀 Americano';
-    const top3 = (sc.stats||[]).slice(0,3).map((p,i) => ['🥇','🥈','🥉'][i] + ' ' + p.name).join(' · ');
+    const scStats = sc.stats || sc.totals_data || [];
+    const top3 = scStats.slice(0,3).map((p,i) => ['🥇','🥈','🥉'][i] + ' ' + p.name).join(' · ') || 'Belum ada hasil';
     const rounds = sc.rounds ? sc.rounds.length : '?';
     const wrap = document.createElement('div');
     wrap.className = 'card-sm flex items-center justify-between flex-wrap gap-2 mb-2';
@@ -3534,11 +3536,30 @@ function renderScoringHistory() {
     btnCsv.style.cssText = 'padding:4px 10px;font-size:11px;';
     btnCsv.textContent = '📊 CSV';
     btnCsv.onclick = () => exportScoringCSV(sc.session_id);
-    btns.appendChild(btnView); btns.appendChild(btnCsv);
+    const btnDel = document.createElement('button');
+    btnDel.className = 'btn btn-danger';
+    btnDel.style.cssText = 'padding:4px 8px;font-size:11px;';
+    btnDel.textContent = '✕';
+    btnDel.onclick = () => deleteScoring(sc.session_id);
+    btns.appendChild(btnView); btns.appendChild(btnCsv); btns.appendChild(btnDel);
     wrap.appendChild(info); wrap.appendChild(btns);
     return wrap.outerHTML;
   });
   el.innerHTML = items.join('');
+}
+
+function deleteScoring(sessionId) {
+  if (!confirm('Hapus hasil scoring sesi ini?')) return;
+  DB.scoring = (DB.scoring || []).filter(sc => sc.session_id !== sessionId);
+  saveDB();
+  renderScoringHistory();
+  renderSessionsTable();
+  if (supabaseClient) {
+    syncStart('Deleting...');
+    supabaseClient.from('scoring').delete().eq('session_id', sessionId)
+      .then(() => syncDone(true, 'Deleted ✓'))
+      .catch(e => { console.warn(e); syncError('Delete failed'); });
+  }
 }
 
 function viewScoringResult(sessionId) {
@@ -3547,12 +3568,13 @@ function viewScoringResult(sessionId) {
   // Rebuild scState from saved data and show leaderboard
   scState.sessionId = sessionId;
   scState.format = sc.format || 'americano';
-  scState.rounds = sc.rounds || [];
+  scState.rounds = sc.rounds || sc.rounds_data || [];
   scState.maxScore = 21;
   const s = DB.sessions.find(s => s.id === sessionId);
   scState.players = s ? (s.attendees || []) : [];
   // Make sure all players from stats are included
-  if (sc.stats) sc.stats.forEach(p => { if (!scState.players.includes(p.id)) scState.players.push(p.id); });
+  const allStats = sc.stats || sc.totals_data || [];
+  allStats.forEach(p => { if (p.id && !scState.players.includes(p.id)) scState.players.push(p.id); });
 
   document.getElementById('sc-setup-card').style.display = 'none';
   document.getElementById('sc-history-section').style.display = 'none';
